@@ -1,0 +1,66 @@
+{{$hostname := getenv "HOSTNAME"}}
+{{$local_ipaddr := getenv "IP"}}
+{{$rack_no := getenv "RACK"}}
+{{$local_asnum := {{getv (printf "/racks/%s/as_number" $rack_no)}}}}
+{{$tor_ipaddr := {{getv (printf "/racks/%s/tor" $rack_no)}}}}
+{{$tor_bgpport := {{getv (printf "/racks/%s/bgpport" $rack_no)}}}}
+
+# Configure logging
+log stderr all;
+
+# Override router ID
+router id {{$local_ipaddr}};
+
+# Turn on global debugging of all protocols
+debug protocols all;
+
+# This pseudo-protocol watches all interface up/down events.
+protocol device {
+  scan time 2;    # Scan interfaces every 2 seconds
+}
+
+# session with TOR switch
+protocol bgp 'rack-{{$i}}' {
+  local as {{$local_asnum}};
+  neighbor {{$tor_ipaddr}}:{{$tor_bgpport}} as {{$local_asnum}};
+  description "TOR-{{$tor_ipaddr}}";
+  multihop;
+  rr client;
+  import all;
+  export all;
+  next hop keep;
+  source address {{$local_ipaddr}};
+}
+
+# Sessions with another RR from this rack
+
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}
+{{$rr_rl := {{printf "/racks/%s/RRs/%s/ipaddr" $rack_no $i}}}}
+{{$rr_ipaddr := {{getv (printf "%s/ipaddr" $rr_rl)}}}}
+{{$rr_bgpport := {{getv (printf "%s/bgpport" $rr_rl)}}}}
+{{$rr_bgpport := {{getv (printf "%s/bgpport" $rr_rl)}}}}
+{{$rr_nexthop := {{getv (printf "%s/nexthop" $rr_rl)}}}}
+protocol bgp 'RR-{{$rr_ipaddr}}' {
+  local as {{$local_asnum}};
+  neighbor {{$rr_ipaddr}}:{{$rr_port}} as {{$local_asnum}};
+  description "RR-{{$rr_ipaddr}}";
+  multihop;
+  import all;
+  export all;
+  next hop keep;
+  source address {{$local_ipaddr}};
+}
+{{end}}
+
+
+{{range $i := lsdir "/racks"}} {{if exists (printf "/racks/%s/veth/1" $i)}}
+protocol bgp 'rack-{{$i}}' {
+  local as {{$local_asnum}};
+  neighbor {{getv (printf "/racks/%s/veth/1" $i)}} as {{getv (printf "/racks/%s/as_number" $i)}};
+  description "rack-{{$i}}";
+  multihop;
+  import all;
+  export all;
+  #next hop keep;
+}
+{{end}} {{end}}
