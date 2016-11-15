@@ -8,3 +8,4 @@ ETCD_SCHEME='http'
 HOSTNAME='svasilenko-01-001'
 IP='10.222.1.1'
 RACK='1'
+
