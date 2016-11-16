@@ -5,7 +5,7 @@ dest = "/etc/bird/bird.conf"
 owner = "root"
 mode = "0644"
 keys = [
-  "racks",
+  "/racks",
 ]
 #check_cmd = "bird -p -c /etc/bird/bird.conf"
 reload_cmd = "birdcl -s /var/run/bird.ctl configure"
