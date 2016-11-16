@@ -7,6 +7,6 @@ mkdir -p /etc/service
 
 # enable services
 ln -s /etc/sv/confd /etc/service/
-#ln -s /etc/sv/bird /etc/service/
+ln -s /etc/sv/bird /etc/service/
 
 cd $OPWD
