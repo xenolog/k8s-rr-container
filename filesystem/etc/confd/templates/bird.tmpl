@@ -1,6 +1,6 @@
-{{$hostname := getenv "HOSTNAME"}}
-{{$local_ipaddr := getenv "IP"}}
 {{$rack_no := getenv "RACK"}}
+{{$bgpd_mode := getenv "BGPD_MODE"}}
+{{$local_ipaddr := getenv "IP"}}
 {{$local_asnum := getv (printf "/racks/%s/as_number" $rack_no)}}
 {{$tor_ipaddr := getv (printf "/racks/%s/tor" $rack_no)}}
 
@@ -18,6 +18,11 @@ protocol device {
   scan time 2;    # Scan interfaces every 2 seconds
 }
 
+{{if ne $bgpd_mode "RR"}}
+# Node-specific global configuration options
+{{end}}
+
+{{if eq $bgpd_mode "RR"}}
 ###
 # session with TOR switch
 protocol bgp 'rack-{{$rack_no}}' {
@@ -32,34 +37,40 @@ protocol bgp 'rack-{{$rack_no}}' {
   source address {{$local_ipaddr}};
 }
 
-
 ###
-# Sessions with another RR from this rack
-{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}
-{{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}}
-{{if exists (printf "%s/nexthop" $rr_rl)}}{{$rr_nexthop := getv (printf "%s/nexthop" $rr_rl)}}{{else}}{{$rr_nexthop := "keep"}}{{end}}
-{{if ne $rr_ipaddr $local_ipaddr}}
-protocol bgp 'RR-{{$rr_ipaddr}}' {
+# Sessions with another RR from my rack
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}} {{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}} {{$rr_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $rr_rl)}}{{$rr_nexthop := getv (printf "%s/nexthop" $rr_rl)}}{{end}}
+{{if ne $rr_ipaddr $local_ipaddr}} protocol bgp 'RR-{{$rr_ipaddr}}' {
   local as {{$local_asnum}};
   neighbor {{$rr_ipaddr}} {{if exists (printf "%s/bgpport" $rr_rl)}}port {{getv (printf "%s/bgpport" $rr_rl)}}{{end}} as {{$local_asnum}};
   description "RR-{{$rr_ipaddr}}";
   multihop;
   import all;
   export all;
-  next hop keep;
+  next hop {{$rr_nexthop}};
   source address {{$local_ipaddr}};
-}
-{{end}}{{end}}
+}{{end}}{{end}}
+{{else}}
+###
+# Sessions with my rack RRs
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}
+{{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}}
+protocol bgp 'RR-{{$rr_ipaddr}}' {
+  local as {{$local_asnum}};
+  neighbor {{$rr_ipaddr}} {{if exists (printf "%s/bgpport" $rr_rl)}}port {{getv (printf "%s/bgpport" $rr_rl)}}{{end}} as {{$local_asnum}};
+  description "RR-{{$rr_ipaddr}}";
+  import all;
+  export all;  # export filter should be here
+  next hop self;
+  source address {{$local_ipaddr}};
+}{{end}}
+{{end}}
 
-
+{{if eq $bgpd_mode "RR"}}
 ###
 # Sessions with nodes in this rack
-{{range $i := lsdir (printf "/racks/%s/RR-clients" $rack_no)}}
-{{$client_rl := printf "/racks/%s/RR-clients/%s" $rack_no $i}}  {{$client_ipaddr := getv (printf "%s/ipaddr" $client_rl)}}
-{{if exists (printf "%s/bgpport" $client_rl)}}{{$client_bgpport := getv (printf "%s/bgpport" $client_rl)}}{{else}}{{$client_bgpport := "179"}}{{end}}
-{{if exists (printf "%s/nexthop" $client_rl)}}{{$client_nexthop := getv (printf "%s/nexthop" $client_rl)}}{{else}}{{$client_nexthop := "keep"}}{{end}}
-{{if ne $client_ipaddr $local_ipaddr}}
-protocol bgp 'node-{{$client_ipaddr}}' {
+{{range $i := lsdir (printf "/racks/%s/RR-clients" $rack_no)}} {{$client_rl := printf "/racks/%s/RR-clients/%s" $rack_no $i}}  {{$client_ipaddr := getv (printf "%s/ipaddr" $client_rl)}} {{$client_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $client_rl)}}{{$client_nexthop := getv (printf "%s/nexthop" $client_rl)}}{{end}}
+{{if ne $client_ipaddr $local_ipaddr}}protocol bgp 'node-{{$client_ipaddr}}' {
   local as {{$local_asnum}};
   neighbor {{$client_ipaddr}} {{if exists (printf "%s/bgpport" $client_rl)}}port {{getv (printf "%s/bgpport" $client_rl)}}{{end}} as {{$local_asnum}};
   description "node-{{$client_ipaddr}}";
@@ -67,7 +78,8 @@ protocol bgp 'node-{{$client_ipaddr}}' {
   rr client;
   import all;
   export all;
-  next hop keep;
+  next hop {{$client_nexthop}};
   source address {{$local_ipaddr}};
 }
 {{end}}{{end}}
+{{end}}
