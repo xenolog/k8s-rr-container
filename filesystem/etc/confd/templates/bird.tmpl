@@ -5,6 +5,8 @@
 {{$tor_ipaddr := getv (printf "/racks/%s/tor" $rack_no)}}
 
 # Configure logging
+# Configure logging
+#log syslog { debug, trace, info, remote, warning, error, auth, fatal, bug };
 log stderr all;
 
 # Override router ID
@@ -20,6 +22,30 @@ protocol device {
 
 {{if ne $bgpd_mode "RR"}}
 # Node-specific global configuration options
+
+filter exported_by_bgp {
+  if ( (ifname ~ "tap*") || (ifname ~ "cali*") || (ifname ~ "dummy1") ) then {
+    if  net != 0.0.0.0/0 then accept;
+  }
+  reject;
+}
+
+# Configure synchronization between BIRD's routing tables and the
+# kernel.
+protocol kernel {
+  learn;          # Learn all alien routes from the kernel
+  persist;        # Don't remove routes on bird shutdown
+  scan time 2;    # Scan kernel routing table every 2 seconds
+  import all;
+  graceful restart;
+  export all;     # Default is export none
+}
+
+protocol direct {
+   debug all;
+   interface "-tap*", "-cali*", "-lo*", "-dummy*", "*";
+}
+
 {{end}}
 
 {{if eq $bgpd_mode "RR"}}
@@ -39,7 +65,7 @@ protocol bgp 'rack-{{$rack_no}}' {
 
 ###
 # Sessions with another RR from my rack
-{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}} {{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}} {{$rr_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $rr_rl)}}{{$rr_nexthop := getv (printf "%s/nexthop" $rr_rl)}}{{end}}
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}  {{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}} {{$rr_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $rr_rl)}}{{$rr_nexthop := getv (printf "%s/nexthop" $rr_rl)}}{{end}}
 {{if ne $rr_ipaddr $local_ipaddr}} protocol bgp 'RR-{{$rr_ipaddr}}' {
   local as {{$local_asnum}};
   neighbor {{$rr_ipaddr}} {{if exists (printf "%s/bgpport" $rr_rl)}}port {{getv (printf "%s/bgpport" $rr_rl)}}{{end}} as {{$local_asnum}};
@@ -53,14 +79,13 @@ protocol bgp 'rack-{{$rack_no}}' {
 {{else}}
 ###
 # Sessions with my rack RRs
-{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}
-{{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}}
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}  {{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}}
 protocol bgp 'RR-{{$rr_ipaddr}}' {
   local as {{$local_asnum}};
   neighbor {{$rr_ipaddr}} {{if exists (printf "%s/bgpport" $rr_rl)}}port {{getv (printf "%s/bgpport" $rr_rl)}}{{end}} as {{$local_asnum}};
   description "RR-{{$rr_ipaddr}}";
   import all;
-  export all;  # export filter should be here
+  export filter exported_by_bgp;
   next hop self;
   source address {{$local_ipaddr}};
 }{{end}}
