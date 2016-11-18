@@ -7,5 +7,5 @@ mode = "0644"
 keys = [
   "/racks",
 ]
-#check_cmd = "bird -p -c /etc/bird/bird.conf"
+check_cmd = "bird -p -c {{.src}}"
 reload_cmd = "birdcl -s /var/run/bird.ctl configure"
