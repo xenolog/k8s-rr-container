@@ -23,6 +23,11 @@ protocol device {
 {{if ne $bgpd_mode "RR"}}
 # Node-specific global configuration options
 
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}{{$cl_rl := printf "/racks/%s/RR-clients/%s" $rack_no $i}}{{$cl_ipaddr := getv (printf "%s/ipaddr" $cl_rl)}}
+{{if eq $local_ipaddr $cl_ipaddr}}listen bgp address {{$cl_ipaddr}} {{if exists (printf "%s/bgpport" $cl_rl)}}port {{getv (printf "%s/bgpport" $cl_rl)}}{{end}};
+{{end}} {{end}}
+
+
 filter exported_by_bgp {
   if ( (ifname ~ "tap*") || (ifname ~ "cali*") || (ifname ~ "dummy1") ) then {
     if  net != 0.0.0.0/0 then accept;
@@ -49,6 +54,11 @@ protocol direct {
 {{end}}
 
 {{if eq $bgpd_mode "RR"}}
+
+{{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}{{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}{{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}}
+{{if eq $local_ipaddr $rr_ipaddr}}listen bgp address {{$rr_ipaddr}} {{if exists (printf "%s/bgpport" $rr_rl)}}port {{getv (printf "%s/bgpport" $rr_rl)}}{{end}};
+{{end}} {{end}}
+
 ###
 # session with TOR switch
 protocol bgp 'rack-{{$rack_no}}' {
@@ -66,7 +76,7 @@ protocol bgp 'rack-{{$rack_no}}' {
 ###
 # Sessions with another RR from my rack
 {{range $i := lsdir (printf "/racks/%s/RRs" $rack_no)}}  {{$rr_rl := printf "/racks/%s/RRs/%s" $rack_no $i}}  {{$rr_ipaddr := getv (printf "%s/ipaddr" $rr_rl)}} {{$rr_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $rr_rl)}}{{$rr_nexthop := getv (printf "%s/nexthop" $rr_rl)}}{{end}}
-{{if ne $rr_ipaddr $local_ipaddr}} protocol bgp 'RR-{{$rr_ipaddr}}' {
+{{if ne $rr_ipaddr $local_ipaddr}}protocol bgp 'RR-{{$rr_ipaddr}}' {
   local as {{$local_asnum}};
   neighbor {{$rr_ipaddr}} {{if exists (printf "%s/bgpport" $rr_rl)}}port {{getv (printf "%s/bgpport" $rr_rl)}}{{end}} as {{$local_asnum}};
   description "RR-{{$rr_ipaddr}}";
