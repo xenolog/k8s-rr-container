@@ -4,9 +4,8 @@ Route Redistribution container, implements Route-Reflector, Calico-node, ExtIP a
 ENV should contain:
 
 ```
-ETCD_AUTHORITY=127.0.0.1:2379
-ETCD_SCHEME=http
-#HOSTNAME=svasilenko-01-001
+ETCD_AUTHORITY=https://127.0.0.1:2379/,https://10.0.0.1:2379/
+HOSTNAME=svasilenko-01-001
 RACK=1
 BGPD_MODE=RR  # may be RR or NODE (default)
 IP=10.222.1.1

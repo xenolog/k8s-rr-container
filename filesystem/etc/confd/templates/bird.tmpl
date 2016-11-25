@@ -5,12 +5,13 @@
 {{$tor_ipaddr := getv (printf "/racks/%s/tor" $rack_no)}}
 
 # Configure logging
-# Configure logging
 #log syslog { debug, trace, info, remote, warning, error, auth, fatal, bug };
 log stderr all;
 
+{{if ne $bgpd_mode "RR"}}
 # Override router ID
-router id {{$local_ipaddr}};
+router id {{$local_ipaddr}}
+{{end}};
 
 # Turn on global debugging of all protocols
 debug protocols all;
@@ -27,10 +28,12 @@ protocol device {
 {{if eq $local_ipaddr $cl_ipaddr}}listen bgp address {{$cl_ipaddr}} {{if exists (printf "%s/bgpport" $cl_rl)}}port {{getv (printf "%s/bgpport" $cl_rl)}}{{end}};
 {{end}} {{end}}
 
-
 filter exported_by_bgp {
   if ( (ifname ~ "tap*") || (ifname ~ "cali*") || (ifname ~ "dummy1") ) then {
-    if  net != 0.0.0.0/0 then accept;
+    if net != 0.0.0.0/0 then accept;
+  }
+  if ( ifname = "lo" ) then {
+    if net != 127.0.0.0/8 then accept;
   }
   reject;
 }
@@ -86,6 +89,22 @@ protocol bgp 'rack-{{$rack_no}}' {
   next hop {{$rr_nexthop}};
   source address {{$local_ipaddr}};
 }{{end}}{{end}}
+
+###
+# Sessions with nodes in this rack
+{{range $i := lsdir (printf "/racks/%s/RR-clients" $rack_no)}} {{$client_rl := printf "/racks/%s/RR-clients/%s" $rack_no $i}}  {{$client_ipaddr := getv (printf "%s/ipaddr" $client_rl)}} {{$client_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $client_rl)}}{{$client_nexthop := getv (printf "%s/nexthop" $client_rl)}}{{end}}
+protocol bgp 'node-{{$client_ipaddr}}' {
+  local as {{$local_asnum}};
+  neighbor {{$client_ipaddr}} {{if exists (printf "%s/bgpport" $client_rl)}}port {{getv (printf "%s/bgpport" $client_rl)}}{{end}} as {{$local_asnum}};
+  description "node-{{$client_ipaddr}}";
+  multihop;
+  rr client;
+  import all;
+  export all;
+  next hop {{$client_nexthop}};
+  source address {{$local_ipaddr}};
+}
+{{end}}
 {{else}}
 ###
 # Sessions with my rack RRs
@@ -99,22 +118,4 @@ protocol bgp 'RR-{{$rr_ipaddr}}' {
   next hop self;
   source address {{$local_ipaddr}};
 }{{end}}
-{{end}}
-
-{{if eq $bgpd_mode "RR"}}
-###
-# Sessions with nodes in this rack
-{{range $i := lsdir (printf "/racks/%s/RR-clients" $rack_no)}} {{$client_rl := printf "/racks/%s/RR-clients/%s" $rack_no $i}}  {{$client_ipaddr := getv (printf "%s/ipaddr" $client_rl)}} {{$client_nexthop := "keep"}}{{if exists (printf "%s/nexthop" $client_rl)}}{{$client_nexthop := getv (printf "%s/nexthop" $client_rl)}}{{end}}
-{{if ne $client_ipaddr $local_ipaddr}}protocol bgp 'node-{{$client_ipaddr}}' {
-  local as {{$local_asnum}};
-  neighbor {{$client_ipaddr}} {{if exists (printf "%s/bgpport" $client_rl)}}port {{getv (printf "%s/bgpport" $client_rl)}}{{end}} as {{$local_asnum}};
-  description "node-{{$client_ipaddr}}";
-  multihop;
-  rr client;
-  import all;
-  export all;
-  next hop {{$client_nexthop}};
-  source address {{$local_ipaddr}};
-}
-{{end}}{{end}}
 {{end}}
